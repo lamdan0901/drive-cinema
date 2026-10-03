@@ -1,5 +1,6 @@
 'use client';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 import type { DriveFile, SubtitleCandidate, SubtitleDocument } from '@/lib/types';
 import { parseSubtitles } from '@/lib/subtitles/parse';
 import { serializeVtt } from '@/lib/subtitles/serialize';
@@ -8,14 +9,24 @@ import { decodeSubtitle, SUBTITLE_LIMIT } from '@/lib/subtitles/decode';
 import { readPreferences, writePreferences } from '@/lib/media/preferences';
 import { playerShortcut } from '@/lib/media/shortcuts';
 import { SubtitleControls } from './subtitle-controls';
+import { MediaPlayer } from './media-player';
+function disableSubtitleTracks(video: HTMLVideoElement) {
+  for (const track of video.textTracks) track.mode = 'disabled';
+}
 export function VideoPlayer({
   video,
   subtitleCandidates,
   onClose,
+  sidebar,
+  sidebarOpen = false,
+  onToggleSidebar,
 }: {
   video: DriveFile;
   subtitleCandidates: SubtitleCandidate[];
   onClose: () => void;
+  sidebar?: ReactNode;
+  sidebarOpen?: boolean;
+  onToggleSidebar?: () => void;
 }) {
   const [preferences] = useState(() => readPreferences(video.id));
   const [selected, setSelected] = useState(preferences.subtitleId ?? 'off');
@@ -27,7 +38,18 @@ export function VideoPlayer({
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [playbackError, setPlaybackError] = useState('');
+  const [expanded, setExpanded] = useState(false);
   const media = useRef<HTMLVideoElement>(null);
+  const wasExpanded = useRef(false);
+  useLayoutEffect(() => {
+    if (expanded === wasExpanded.current) return;
+    wasExpanded.current = expanded;
+    const behavior = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+      ? 'auto'
+      : 'smooth';
+    if (expanded) media.current?.scrollIntoView({ block: 'center', behavior });
+    else window.scrollTo({ top: 0, behavior });
+  }, [expanded]);
   const track = useRef<HTMLTrackElement>(null);
   const autoChosen = useRef(!!preferences.subtitleId);
   const previousCandidates = useRef(subtitleCandidates);
@@ -109,8 +131,9 @@ export function VideoPlayer({
     if (track.current?.track) track.current.track.mode = 'showing';
   }
   useEffect(() => {
+    const el = media.current;
     if (url) showTrack();
-    else if (media.current) for (const t of media.current.textTracks) t.mode = 'disabled';
+    else if (el) disableSubtitleTracks(el);
   }, [url]);
   useEffect(() => {
     const el = media.current;
@@ -163,7 +186,7 @@ export function VideoPlayer({
   }
   return (
     <section
-      className="player-panel"
+      className={`player-panel${expanded ? ' player-panel--expanded' : ''}`}
       aria-label="Video player"
       onKeyDown={(e) => {
         if (e.ctrlKey || e.altKey || e.metaKey || e.repeat) return;
@@ -198,57 +221,65 @@ export function VideoPlayer({
           Close ×
         </button>
       </div>
-      <video
-        ref={media}
-        src={'/api/video/' + encodeURIComponent(video.id)}
-        controls
-        playsInline
-        preload="metadata"
-        tabIndex={0}
-        aria-label={video.name}
-        onLoadedMetadata={() => {
-          metadataReady.current = true;
-          const el = media.current!;
-          if (
-            preferences.time > 0 &&
-            Number.isFinite(el.duration) &&
-            preferences.time < el.duration - 5
-          )
-            el.currentTime = preferences.time;
-        }}
-        onPlay={() => {
-          metadataReady.current = true;
-          setPlaybackError('');
-        }}
-        onTimeUpdate={() => save()}
-        onPause={() => save(true)}
-        onEnded={() => {
-          writePreferences(video.id, {
-            time: 0,
-            offset,
-            subtitleId: selected === 'local' ? 'off' : selected,
-          });
-          metadataReady.current = false;
-        }}
-        onError={() =>
-          setPlaybackError(
-            'This video could not be played. Check Drive permissions or quota, then try an MP4 with H.264 video and AAC audio.',
-          )
-        }
+      <MediaPlayer
+        videoRef={media}
+        expanded={expanded}
+        onToggleExpanded={() => setExpanded((value) => !value)}
+        sidebarOpen={sidebarOpen}
+        onToggleSidebar={onToggleSidebar}
       >
-        {url && (
-          <track
-            key={url}
-            ref={track}
-            kind="subtitles"
-            src={url}
-            srcLang="und"
-            label="Selected subtitle"
-            default
-            onLoad={showTrack}
-          />
-        )}
-      </video>
+        <video
+          ref={media}
+          src={'/api/video/' + encodeURIComponent(video.id)}
+          playsInline
+          preload="metadata"
+          tabIndex={0}
+          aria-label={video.name}
+          onLoadedMetadata={() => {
+            metadataReady.current = true;
+            const el = media.current!;
+            if (
+              preferences.time > 0 &&
+              Number.isFinite(el.duration) &&
+              preferences.time < el.duration - 5
+            )
+              el.currentTime = preferences.time;
+          }}
+          onPlay={() => {
+            metadataReady.current = true;
+            setPlaybackError('');
+          }}
+          onTimeUpdate={() => save()}
+          onPause={() => save(true)}
+          onEnded={() => {
+            writePreferences(video.id, {
+              time: 0,
+              offset,
+              subtitleId: selected === 'local' ? 'off' : selected,
+            });
+            metadataReady.current = false;
+          }}
+          onError={() =>
+            setPlaybackError(
+              'This video could not be played. Check Drive permissions or quota, then try an MP4 with H.264 video and AAC audio.',
+            )
+          }
+        >
+          {url && (
+            <track
+              key={url}
+              ref={track}
+              kind="subtitles"
+              src={url}
+              srcLang="und"
+              label="Selected subtitle"
+              default
+              onLoad={showTrack}
+            />
+          )}
+        </video>
+        {sidebar}
+      </MediaPlayer>
       {playbackError && (
         <p className="error-message" role="alert">
           {playbackError}{' '}
@@ -278,7 +309,8 @@ export function VideoPlayer({
         </p>
       )}
       <p className="player-hint">
-        Space / K to play · ← → to seek 5 seconds · Local subtitles stay on this device
+        Space / K to play · ← → to seek 5 seconds · F for fullscreen · T for full width · P for
+        folder videos · Local subtitles stay on this device
       </p>
     </section>
   );

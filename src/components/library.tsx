@@ -6,6 +6,8 @@ import { matchSubtitles } from '@/lib/media/match';
 import { readPins, writePins, type PinnedFolder } from '@/lib/media/pins';
 import { FileBrowser } from './file-browser';
 import { VideoPlayer } from './video-player';
+import { FolderVideoSidebar } from './folder-video-sidebar';
+import { createFolderVideoCache } from '@/lib/media/folder-video-cache';
 const folderType = 'application/vnd.google-apps.folder';
 const viewStorageKey = 'drive-cinema:view';
 const rootPath = [{ id: 'root', name: 'My Drive' }];
@@ -56,6 +58,35 @@ async function json<T>(url: string, signal: AbortSignal, init: RequestInit = {})
 export function Library({ name, accountId }: { name?: string; accountId: string }) {
   const [path, setPath] = useState(rootPath);
   const [locationReady, setLocationReady] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [folderVideoCache] = useState(createFolderVideoCache);
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if (
+        !locationReady ||
+        event.defaultPrevented ||
+        event.ctrlKey ||
+        event.altKey ||
+        event.metaKey ||
+        event.repeat ||
+        event.isComposing
+      )
+        return;
+      if (
+        event.target instanceof Element &&
+        event.target.closest(
+          'input,textarea,select,[contenteditable]:not([contenteditable="false"]),[role="textbox"]',
+        )
+      )
+        return;
+      if (event.key.toLowerCase() === 'p') {
+        event.preventDefault();
+        setSidebarOpen((value) => !value);
+      } else if (event.key === 'Escape') setSidebarOpen(false);
+    }
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [locationReady]);
   const [restoreRetry, setRestoreRetry] = useState(0);
   const currentPath = useRef(path);
   useEffect(() => {
@@ -275,7 +306,11 @@ export function Library({ name, accountId }: { name?: string; accountId: string 
   function folder(file: DriveFile) {
     navigate([...path, { id: file.id, name: file.name }]);
   }
-  async function open(idOrLink: string, pinned?: PinnedFolder) {
+  async function open(
+    idOrLink: string,
+    pinned?: PinnedFolder,
+    onFailure?: (error: unknown) => void,
+  ) {
     selection.current?.abort();
     const controller = new AbortController();
     selection.current = controller;
@@ -312,7 +347,10 @@ export function Library({ name, accountId }: { name?: string; accountId: string 
       setVideo(file);
       updateLocation({ file: file.id });
     } catch (e) {
-      if (!controller.signal.aborted) showError(e);
+      if (!controller.signal.aborted) {
+        showError(e);
+        onFailure?.(e);
+      }
     } finally {
       if (selection.current === controller) setOpening(false);
     }
@@ -357,6 +395,9 @@ export function Library({ name, accountId }: { name?: string; accountId: string 
         },
       );
       if (controller.signal.aborted) return;
+      for (const folderId of new Set([parent, ...(file.parents ?? []), ...(updated.parents ?? [])]))
+        folderVideoCache.invalidate(folderId);
+      if (file.mimeType === folderType) folderVideoCache.invalidate(file.id);
       listRequest.current?.controller.abort();
       selection.current?.abort();
       setOpening(false);
@@ -412,6 +453,19 @@ export function Library({ name, accountId }: { name?: string; accountId: string 
   }
   const visible = files;
   const videos = visible.filter((f) => f.mimeType.startsWith('video/')).length;
+  const sidebar =
+    sidebarOpen && locationReady ? (
+      <FolderVideoSidebar
+        key={`${parent}:${retry}`}
+        folderId={parent}
+        folderName={path.at(-1)!.name}
+        selectedId={video?.id}
+        busy={busy || opening}
+        cache={folderVideoCache}
+        onPlay={(id, onFailure) => void open(id, undefined, onFailure)}
+        onClose={() => setSidebarOpen(false)}
+      />
+    ) : null;
   return (
     <div className="app-shell">
       <header className="app-header">
@@ -473,6 +527,9 @@ export function Library({ name, accountId }: { name?: string; accountId: string 
             key={video.id}
             video={video}
             subtitleCandidates={candidates}
+            sidebar={sidebar}
+            sidebarOpen={sidebarOpen}
+            onToggleSidebar={() => setSidebarOpen((value) => !value)}
             onClose={() => {
               selection.current?.abort();
               setVideo(null);
@@ -644,6 +701,7 @@ export function Library({ name, accountId }: { name?: string; accountId: string 
           <span>SRT + VTT · Browser-compatible videos</span>
         </footer>
       </main>
+      {!video && sidebar}
     </div>
   );
 }

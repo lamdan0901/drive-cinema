@@ -42,6 +42,44 @@ Eleven navigation tests cover nested-folder/video reload, searches, Back/Forward
 
 The production Next.js app was checked in local Chromium using a synthetic encrypted session and intercepted Drive API responses. Folder/video reload, restored breadcrumbs, Back/Forward, player close, saved searches, brand reset, and the root-list history case passed with no browser JavaScript errors. The in-app browser was unavailable, so standalone Chromium was used. No real Google credentials or Drive files were used in this check; live-account access remains unverified.
 
+## Custom media player and view modes — 2026-10-03
+
+Adapted the overlay controls and CSS from Immersive-Video-Playlist's `M3u8Player` around the existing Drive video element. Normal view retains the library layout; expanded view fills the page width; fullscreen includes the video and custom controls. Mode changes keep the same media element, playback position, and subtitle track. Fullscreen state follows the browser's `fullscreenchange` event and returns to the previous layout on exit.
+
+Nine new player tests cover playback/volume controls, metadata and buffered progress, keyboard and pointer seeking, pointer cancellation, normal/expanded switching, fullscreen requests and browser exit events, rejected requests, and control visibility. A Chromium check reproduced controls staying visible after clicking Play because the focused button blocked hiding. A regression test failed before the timer was corrected to distinguish keyboard focus using `:focus-visible`. Fresh lint, typecheck, all 145 tests, and the production build passed.
+
+An independent read-only review found clipping of the fullscreen button at 320px when hour-format timestamps and the volume slider shared a row. The Chromium responsive check reproduced this before a narrow-screen grid placed the timestamp on its own row. The user then set a desktop-only project rule in `AGENTS.md`; the final mobile recheck was skipped under that rule.
+
+Production Chromium checks used a synthetic encrypted session, intercepted Drive responses, and a generated H.264/AAC fixture. Real playback, seeking, mute, showing Vietnamese subtitles, page-width expansion, actual browser fullscreen and exit, unchanged video identity/position, auto-hide, and keyboard focus behavior passed. Normal and expanded layouts were checked at 1440px, 390px, and 320px; mobile controls fit with no horizontal overflow. No browser JavaScript errors were observed. Headless Chrome's Escape accelerator required a programmatic fullscreen exit; browser exit-event handling is also covered by the component test. The in-app browser connection timed out, so standalone Chromium was used. No real account or Drive files were used.
+
+## View scrolling and folder-video sidebar — 2026-10-03
+
+Switching to normal view scrolls the page to the top; expanding centers the video after the expanded layout is committed. Reduced-motion preferences skip smooth scrolling. View changes retain the video element and playback position.
+
+P toggles a floating right sidebar listing every video in the current folder, independent of the collection search. Pagination, folder changes, selection, the current-video marker, retry, and keyboard guards are covered. The sidebar is inside the fullscreen element when a video is open. Selecting a different video uses the existing player remount behavior and opens it in normal view.
+
+An independent read-only review found that failed sidebar selections in fullscreen hid the existing page-level error. A regression test reproduced it before the sidebar gained its own error feedback and renewed-sign-in link. Six new tests cover the scrolling and sidebar behavior. Fresh typecheck, ESLint, and all 151 tests passed. No build was run, following the project rule.
+
+Desktop Chromium checks at 1440px used the existing development server, a synthetic encrypted session, intercepted Drive responses, and a generated H.264/AAC fixture. Video centering, scrolling to the top, unchanged playback across view changes, paginated sidebar contents, text-input guards, fullscreen sidebar visibility, fullscreen selection errors, selecting another video, and closing passed without browser JavaScript errors. No mobile checks or real Google account access were performed.
+
+## Folder-video caching and overlay toggle — 2026-10-03
+
+Complete paginated folder-video lists are cached for one hour in the current library page session. Closing/reopening the sidebar, changing selected videos, and returning to a folder reuse the cache. Successful rename and Trash operations invalidate affected folders even while the sidebar is hidden; failed mutations leave the cache intact. The cache never stores partial or aborted loads, and entry identity prevents an older request from restoring data after invalidation.
+
+A small top-right button over the video shares sidebar state with P and stays available above the panel in normal, expanded, and fullscreen layouts. The panel floats inside the player while a video is open, leaving the button accessible for closing it.
+
+Six additional tests cover the exact one-hour expiry boundary, active and hidden mutation invalidation, shared button/P behavior in fullscreen, per-folder isolation, failed later pages, cancellation, and invalidation during a pending request. Fresh typecheck, ESLint, and all 157 tests passed. An independent read-only review found no actionable issues. No build was run under the project rule.
+
+Desktop Chromium checks at 1440px on the existing development server verified button placement, opening and closing with the button in normal/fullscreen, shared P state, cache reuse without additional folder-list requests, and immediate refresh after rename. Screenshots were inspected. These checks used synthetic sessions and mocked Drive responses; no real Drive data was changed and no mobile checks were run.
+
+## Sidebar button placement and F/T shortcuts — 2026-10-03
+
+The folder-video button now has a light-gray background with no border. It sits in a slim row just above the video's right edge in normal and expanded views, and overlays the top-right corner in fullscreen. The toolbar remains in the fullscreen subtree and does not remount the video.
+
+F toggles fullscreen whenever a video is open. T switches normal/full-width view, exiting fullscreen first if necessary. Both keys ignore editable targets, modified keys, repeated/composing input, and events already handled elsewhere. A failed fullscreen exit reports an error and leaves the page view unchanged.
+
+Three new player tests failed before implementation and now pass. Fresh typecheck, ESLint, and all 160 tests passed. No build was run. Desktop Chromium checks verified actual F/T transitions, existing centering/top scrolling, video identity and position, button bounds above the video in both page layouts, fullscreen placement, light-gray computed background and zero border width, text-input guards, and continued sidebar/cache behavior. Normal and fullscreen screenshots were inspected; no browser JavaScript errors were observed. These checks used synthetic sessions and intercepted Drive responses, with no mobile checks or real account access.
+
 ## Implementation decisions
 
 - Work was kept on a fresh feature branch in the task workspace; no additional worktree was created. If integration elsewhere is needed, the source can be imported or the branch moved.
