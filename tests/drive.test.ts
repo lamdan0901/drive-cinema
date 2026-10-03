@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { parseFileId, listFiles, getFile } from '@/lib/drive/files';
+import { parseFileId, listFiles, getFile, updateFile } from '@/lib/drive/files';
 import type { Session } from '@/lib/types';
 const s: Session = {
   subject: 'u',
@@ -34,6 +34,18 @@ it('escapes Drive query literals and forwards pagination', async () => {
   expect(p.get('q')).toContain('trashed = false');
   expect(p.get('pageToken')).toBe('page');
   expect(r.page.nextPageToken).toBe('next');
+});
+it('rejects trashed metadata so shortcuts cannot open deleted folders', async () => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => Response.json({ id: 'folder', trashed: true })),
+  );
+  await expect(getFile(s, 'folder')).rejects.toMatchObject({ status: 404, code: 'FILE_TRASHED' });
+});
+it('cannot mutate My Drive itself', async () => {
+  vi.stubGlobal('fetch', vi.fn());
+  await expect(updateFile(s, 'root', { trashed: true })).rejects.toMatchObject({ status: 400 });
+  expect(fetch).not.toHaveBeenCalled();
 });
 it('does not expose upstream permission error text', async () => {
   vi.stubGlobal(

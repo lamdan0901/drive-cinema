@@ -65,6 +65,9 @@ it('binds the OAuth transaction and PKCE', () => {
   const url = authorizationUrl(t);
   expect(url.searchParams.get('code_challenge')).toBe(challenge(t.verifier));
   expect(url.searchParams.get('access_type')).toBe('offline');
+  expect(url.searchParams.get('scope')).toBe(
+    'openid profile https://www.googleapis.com/auth/drive',
+  );
   expect(() => validateTransaction(t, 'wrong')).toThrow();
   expect(() => validateTransaction({ ...t, createdAt: 0 }, t.state)).toThrow();
 });

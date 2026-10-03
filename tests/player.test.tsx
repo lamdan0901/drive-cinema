@@ -50,6 +50,16 @@ it('switches subtitles off and revokes its object URL', async () => {
   fireEvent.change(screen.getByLabelText('Subtitle track'), { target: { value: 'off' } });
   await waitFor(() => expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:subtitle'));
 });
+it('switches a removed Drive subtitle off and releases its track', async () => {
+  const view = render(
+    <VideoPlayer video={video} subtitleCandidates={candidates} onClose={() => {}} />,
+  );
+  await waitFor(() => expect(URL.createObjectURL).toHaveBeenCalled());
+  expect(screen.getByLabelText('Subtitle track')).toHaveValue('vi');
+  view.rerender(<VideoPlayer video={video} subtitleCandidates={[]} onClose={() => {}} />);
+  await waitFor(() => expect(screen.getByLabelText('Subtitle track')).toHaveValue('off'));
+  expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:subtitle');
+});
 it('offset rebuilds cues from original timestamps', async () => {
   const { container } = render(
     <VideoPlayer video={video} subtitleCandidates={candidates} onClose={() => {}} />,

@@ -30,6 +30,7 @@ export function VideoPlayer({
   const media = useRef<HTMLVideoElement>(null);
   const track = useRef<HTMLTrackElement>(null);
   const autoChosen = useRef(!!preferences.subtitleId);
+  const previousCandidates = useRef(subtitleCandidates);
   const lastWrite = useRef(0);
   const fileSequence = useRef(0);
   const metadataReady = useRef(false);
@@ -37,6 +38,15 @@ export function VideoPlayer({
   useEffect(() => {
     latest.current = { selected, offset };
   }, [selected, offset]);
+  useEffect(() => {
+    if (
+      selected !== 'local' &&
+      previousCandidates.current.some((c) => c.file.id === selected) &&
+      !subtitleCandidates.some((c) => c.file.id === selected)
+    )
+      setSelected('off');
+    previousCandidates.current = subtitleCandidates;
+  }, [selected, subtitleCandidates]);
   useEffect(() => {
     if (autoChosen.current || !subtitleCandidates.length) return;
     autoChosen.current = true;

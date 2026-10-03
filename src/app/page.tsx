@@ -22,7 +22,7 @@ export default async function Page({
           new Request('http://internal', { headers: { cookie: (await cookies()).toString() } }),
         )
       : null;
-  if (session) return <Library name={session.name} />;
+  if (session) return <Library key={session.subject} accountId={session.subject} name={session.name} />;
   return (
     <main className="landing">
       <span className="brand">◉ Drive Cinema</span>

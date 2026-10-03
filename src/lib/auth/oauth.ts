@@ -28,7 +28,7 @@ export function authorizationUrl(t: Transaction): URL {
     client_id: c.googleClientId,
     redirect_uri: c.origin + '/api/auth/callback',
     response_type: 'code',
-    scope: 'openid profile https://www.googleapis.com/auth/drive.readonly',
+    scope: 'openid profile https://www.googleapis.com/auth/drive',
     access_type: 'offline',
     prompt: 'consent',
     state: t.state,

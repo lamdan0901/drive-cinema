@@ -2,9 +2,30 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { readPreferences, writePreferences } from '@/lib/media/preferences';
 import { playerShortcut } from '@/lib/media/shortcuts';
+import { readPins, writePins } from '@/lib/media/pins';
 afterEach(() => {
   localStorage.clear();
   vi.restoreAllMocks();
+});
+it('restores valid folder shortcuts and ignores malformed stored entries', () => {
+  const pin = {
+    id: 'movies',
+    name: 'Movies',
+    path: [
+      { id: 'root', name: 'My Drive' },
+      { id: 'movies', name: 'Movies' },
+    ],
+  };
+  writePins('viewer', [pin]);
+  expect(readPins('viewer')).toEqual([pin]);
+  expect(readPins('someone-else')).toEqual([]);
+  localStorage.setItem(
+    'drive-cinema:pins:viewer',
+    JSON.stringify([null, { ...pin, path: [null] }, { ...pin, id: 'different' }, pin]),
+  );
+  expect(readPins('viewer')).toEqual([pin]);
+  localStorage.setItem('drive-cinema:pins:viewer', 'broken JSON');
+  expect(readPins('viewer')).toEqual([]);
 });
 it('retains validated preferences', () => {
   writePreferences('movie', { time: 12, offset: -1.5, subtitleId: 'vi' });

@@ -2,7 +2,11 @@ import { beforeEach, afterEach, expect, it, vi } from 'vitest';
 import { seal } from '@/lib/auth/session';
 import { resetRefreshCache } from '@/lib/auth/tokens';
 import { GET as files } from '@/app/api/drive/files/route';
-import { GET as metadata } from '@/app/api/drive/files/[fileId]/route';
+import {
+  GET as metadata,
+  PATCH as rename,
+  DELETE as trash,
+} from '@/app/api/drive/files/[fileId]/route';
 import { GET as video } from '@/app/api/video/[fileId]/route';
 import { GET as subtitles } from '@/app/api/subtitles/[fileId]/route';
 let cookie = '';
@@ -84,4 +88,87 @@ it('rejects unauthenticated file routes', async () => {
       })
     ).status,
   ).toBe(401);
+});
+
+const context = { params: Promise.resolve({ fileId: 'folder' }) };
+function mutationRequest(method: string, body?: string, origin = 'http://localhost:3000') {
+  return new Request('http://localhost:3000/api/drive/files/folder', {
+    method,
+    headers: { cookie, origin, 'Content-Type': 'application/json' },
+    body,
+  });
+}
+it.each([
+  ['PATCH', { name: 'Renamed' }, rename],
+  ['DELETE', { trashed: true }, trash],
+] as const)(
+  'authenticates and refreshes a %s metadata update without permanently deleting',
+  async (method, patch, handler) => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string | URL, init: RequestInit) => {
+        if (String(url).includes('/token'))
+          return Response.json({ access_token: 'fresh', expires_in: 3600 });
+        expect(new URL(url).pathname).toBe('/drive/v3/files/folder');
+        expect(init.method).toBe('PATCH');
+        expect(JSON.parse(init.body as string)).toEqual(patch);
+        expect(new Headers(init.headers).get('authorization')).toBe('Bearer fresh');
+        return Response.json({
+          id: 'folder',
+          name: 'Renamed',
+          mimeType: 'application/vnd.google-apps.folder',
+          ...patch,
+        });
+      }),
+    );
+    const result = await handler(
+      mutationRequest(method, method === 'PATCH' ? JSON.stringify(patch) : undefined),
+      context,
+    );
+    expect(result.status).toBe(200);
+    expect((await result.json()).id).toBe('folder');
+    expect(result.headers.get('set-cookie')).toContain('HttpOnly');
+    expect(result.headers.get('cache-control')).toBe('private, no-store');
+  },
+);
+it('rejects cross-origin and unauthenticated mutations before contacting Google', async () => {
+  vi.stubGlobal('fetch', vi.fn());
+  for (const [method, handler] of [
+    ['PATCH', rename],
+    ['DELETE', trash],
+  ] as const) {
+    expect(
+      (await handler(mutationRequest(method, undefined, 'https://evil.example'), context)).status,
+    ).toBe(403);
+    const request = mutationRequest(method);
+    request.headers.delete('cookie');
+    expect((await handler(request, context)).status).toBe(401);
+  }
+  expect(fetch).not.toHaveBeenCalled();
+});
+it.each([
+  '{',
+  'null',
+  '{}',
+  '{"name":"   "}',
+  '{"name":123}',
+  JSON.stringify({ name: 'x'.repeat(256) }),
+  '{"name":"ok","trashed":true}',
+])('rejects an invalid rename body %s without contacting Google', async (body) => {
+  vi.stubGlobal('fetch', vi.fn());
+  expect((await rename(mutationRequest('PATCH', body), context)).status).toBe(400);
+  expect(fetch).not.toHaveBeenCalled();
+});
+it('returns an actionable, safe mutation permission error', async () => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (url: string | URL) =>
+      String(url).includes('/token')
+        ? Response.json({ access_token: 'fresh', expires_in: 3600 })
+        : Response.json({ error: 'secret upstream details' }, { status: 403 }),
+    ),
+  );
+  const result = await trash(mutationRequest('DELETE'), context);
+  expect(result.status).toBe(403);
+  expect((await result.json()).error).toMatch(/sign in again/i);
 });

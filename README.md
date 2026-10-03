@@ -37,7 +37,7 @@ Open <http://localhost:3000>. Use **Continue with Google**, open a folder, and s
 
 1. In [Google Cloud Console](https://console.cloud.google.com/), create or select a project.
 2. Enable the **Google Drive API** under APIs & Services.
-3. Configure Google Auth Platform / OAuth consent: set your app name, audience, developer contact, and required scopes. This application requests `openid`, `profile`, and `https://www.googleapis.com/auth/drive.readonly`.
+3. Configure Google Auth Platform / OAuth consent: set your app name, audience, developer contact, and required scopes. This application requests `openid`, `profile`, and `https://www.googleapis.com/auth/drive` to browse, stream, rename, and move existing files/folders to Trash. If you previously signed in with read-only access, sign in again to grant the new permission.
 4. If your external app is in **Testing**, add your own Google account under test users. Sign in using that account.
 5. Create an OAuth client of type **Web application**. Register this exact authorized redirect URI:
 
@@ -49,13 +49,16 @@ Open <http://localhost:3000>. Use **Continue with Google**, open a folder, and s
 
 An API key or a Google Drive share link alone cannot replace these OAuth credentials. You do not need to connect Google Drive to ChatGPT to run this application.
 
-The Drive read-only scope grants read access to files your account can access, including downloads. It is a restricted scope. External production apps may require Google verification and, depending on their use of restricted data, a security assessment. Keep a personal testing app limited to your test accounts. Google normally expires refresh tokens after seven days for external apps in Testing when Drive scopes are requested; sign in again when that happens. Workspace policy may also prevent an account from authorizing the app.
+The Drive scope grants read and write access to files your account can access, including downloads, renaming, and deletion. It is a restricted scope. External production apps may require Google verification and, depending on their use of restricted data, a security assessment. Keep a personal testing app limited to your test accounts. Google normally expires refresh tokens after seven days for external apps in Testing when Drive scopes are requested; sign in again when that happens. Workspace policy may also prevent an account from authorizing the app.
 
 See Google's [web-server OAuth guide](https://developers.google.com/identity/protocols/oauth2/web-server), [scope list](https://developers.google.com/workspace/drive/api/guides/api-specific-auth), and [OAuth production readiness](https://developers.google.com/identity/protocols/oauth2/production-readiness/overview).
 
 ## How to use it
 
 - Browse **My Drive** using folders and breadcrumbs. Search is limited to the current folder. **Load more** retrieves the next page.
+- Folder navigation, the selected video, and submitted searches are saved in the URL. Reload or bookmark the page to return to the same location; browser Back/Forward also follows your navigation. Closing the player keeps the current folder.
+- Use **Rename** or **Delete** beside a folder or file. Delete asks for confirmation and moves the item (including folder contents) to Google Drive Trash; restore it in Drive if needed. Actions are disabled when your account lacks the required file permissions.
+- Use **Pin** beside a folder to add it to **Pinned folders**, above the normal folder view. Pins remain available as you navigate and survive reloads on this browser, separately for each Google account. **Unpin** removes only the shortcut.
 - Paste a Google Drive file/folder link or file ID into **Have a link?** to jump to it. Permission and download capability are checked using the signed-in account.
 - Put subtitles beside the video. Filename matching recognizes stems and language suffixes:
 
@@ -114,7 +117,7 @@ Sessions last seven days. Access tokens refresh server-side, preserving the refr
 
 **Sign out** clears the browser's cookies; it does not revoke Google's app grant or invalidate a copied cookie centrally. To revoke the grant, remove the app in your Google account's third-party connections. Rotating `SESSION_SECRET` invalidates all existing sessions. There is no session database or individual centralized revocation in this version.
 
-The app requests read-only Drive access: it does not edit or delete your media. Local subtitle content is not uploaded. The local-storage preferences contain file IDs and playback positions, so clear site data on a shared device. Files must allow downloads; Drive preview-only sharing cannot be bypassed.
+The app requests Drive read and write access. Rename changes the name in Drive; Delete moves the selected file/folder to Drive Trash after confirmation. The app does not permanently delete files. Local subtitle content is not uploaded. Local-storage preferences contain file IDs, folder names/paths, and playback positions, so clear site data on a shared device. Files must allow downloads; Drive preview-only sharing cannot be bypassed.
 
 ## Troubleshooting
 
