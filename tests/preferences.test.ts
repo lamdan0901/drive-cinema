@@ -82,11 +82,13 @@ it('works when storage is unavailable', () => {
   expect(() => writeSubtitleDelay('m', 's', 0.05)).not.toThrow();
 });
 it('ignores keyboard input in editable fields', () => {
-  for (const tag of ['input', 'textarea', 'select', 'button']) {
+  for (const tag of ['input', 'textarea', 'select']) {
     expect(playerShortcut(' ', document.createElement(tag))).toBeNull();
   }
   const div = document.createElement('div');
   div.setAttribute('contenteditable', 'true');
   expect(playerShortcut('ArrowRight', div)).toBeNull();
   expect(playerShortcut('ArrowRight', document.createElement('video'))).toBe('forward');
+  expect(playerShortcut(' ', document.createElement('button'))).toBe('toggle');
+  expect(playerShortcut('L', document.createElement('a'))).toBe('forward10');
 });

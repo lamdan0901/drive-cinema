@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { useCallback, useEffect, useEffectEvent, useRef, useState } from 'react';
 import type { CSSProperties, PointerEvent, ReactNode, RefObject } from 'react';
+import { playerShortcut } from '@/lib/media/shortcuts';
 import './media-player.css';
 
 const CONTROLS_HIDE_DELAY_MS = 2500;
@@ -158,30 +159,61 @@ export function MediaPlayer({
       event.ctrlKey ||
       event.altKey ||
       event.metaKey ||
-      event.isComposing ||
-      (event.target instanceof Element &&
-        event.target.closest(
-          'input,textarea,select,[contenteditable]:not([contenteditable="false"]),[role="textbox"]',
-        ))
+      event.isComposing
     )
       return;
-    const key = event.key.toLowerCase();
-    if (key === 'g' || key === 'h') {
-      event.preventDefault();
-      onAdjustSubtitleOffset(key === 'g' ? -0.05 : 0.05);
-      revealControls();
+    const action = playerShortcut(event.key, event.target);
+    const video = videoRef.current;
+    if (!action || !video) return;
+    if (
+      event.repeat &&
+      (action === 'toggle' || action === 'mute' || action === 'fullscreen' || action === 'expanded')
+    )
       return;
-    }
-    if (event.repeat) return;
-    if (key !== 'f' && key !== 't') return;
     event.preventDefault();
-    if (key === 'f') await toggleFullscreen();
-    else {
-      if (document.fullscreenElement === containerRef.current && !(await toggleFullscreen()))
-        return;
-      onToggleExpanded();
-      revealControls();
+    switch (action) {
+      case 'toggle':
+        togglePlay();
+        break;
+      case 'mute':
+        toggleMute();
+        break;
+      case 'forward':
+      case 'backward':
+      case 'forward10':
+      case 'backward10': {
+        const seconds =
+          action === 'forward' ? 5 : action === 'backward' ? -5 : action === 'forward10' ? 10 : -10;
+        seekTo(video.currentTime + seconds);
+        break;
+      }
+      case 'volumeUp':
+      case 'volumeDown':
+        video.volume = Math.max(
+          0,
+          Math.min(
+            1,
+            Math.round((video.volume + (action === 'volumeUp' ? 0.2 : -0.2)) * 100) / 100,
+          ),
+        );
+        if (video.volume > 0) video.muted = false;
+        setVolume(video.volume);
+        setIsMuted(video.muted);
+        break;
+      case 'subtitlesEarlier':
+      case 'subtitlesLater':
+        onAdjustSubtitleOffset(action === 'subtitlesEarlier' ? -0.05 : 0.05);
+        break;
+      case 'fullscreen':
+        await toggleFullscreen();
+        break;
+      case 'expanded':
+        if (document.fullscreenElement === containerRef.current && !(await toggleFullscreen()))
+          return;
+        onToggleExpanded();
+        break;
     }
+    revealControls();
   });
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -199,6 +231,17 @@ export function MediaPlayer({
         .play()
         .catch(() => setControlError('Playback could not start. Press Play to try again.'));
     else video.pause();
+  }
+
+  function toggleMute() {
+    const video = videoRef.current;
+    if (!video) return;
+    if (video.volume === 0) {
+      video.volume = 1;
+      video.muted = false;
+    } else video.muted = !video.muted;
+    setVolume(video.volume);
+    setIsMuted(video.muted);
   }
 
   function seekTo(time: number) {
@@ -305,10 +348,6 @@ export function MediaPlayer({
             let nextTime: number;
             if (event.key === 'Home') nextTime = 0;
             else if (event.key === 'End') nextTime = duration;
-            else if (event.key === 'ArrowRight' || event.key === 'ArrowUp')
-              nextTime = currentTime + 5;
-            else if (event.key === 'ArrowLeft' || event.key === 'ArrowDown')
-              nextTime = currentTime - 5;
             else return;
             event.preventDefault();
             event.stopPropagation();
@@ -380,15 +419,8 @@ export function MediaPlayer({
                 type="button"
                 className="media-player-icon-btn"
                 aria-label={muted ? 'Unmute' : 'Mute'}
-                title={muted ? 'Unmute' : 'Mute'}
-                onClick={() => {
-                  const video = videoRef.current;
-                  if (!video) return;
-                  if (video.volume === 0) {
-                    video.volume = 1;
-                    video.muted = false;
-                  } else video.muted = !video.muted;
-                }}
+                title={muted ? 'Unmute (M)' : 'Mute (M)'}
+                onClick={toggleMute}
               >
                 {muted ? (
                   <VolumeX aria-hidden="true" size={22} />

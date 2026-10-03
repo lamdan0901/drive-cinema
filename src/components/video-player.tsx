@@ -12,7 +12,6 @@ import {
   readSubtitleDelay,
   writeSubtitleDelay,
 } from '@/lib/media/preferences';
-import { playerShortcut } from '@/lib/media/shortcuts';
 import { SubtitleControls } from './subtitle-controls';
 import { MediaPlayer } from './media-player';
 function disableSubtitleTracks(video: HTMLVideoElement) {
@@ -223,29 +222,6 @@ export function VideoPlayer({
     <section
       className={`player-panel${expanded ? ' player-panel--expanded' : ''}`}
       aria-label="Video player"
-      onKeyDown={(e) => {
-        if (e.ctrlKey || e.altKey || e.metaKey || e.repeat) return;
-        const action = playerShortcut(e.key, e.target);
-        const el = media.current;
-        if (!action || !el) return;
-        e.preventDefault();
-        if (action === 'toggle') {
-          if (el.paused)
-            void el
-              .play()
-              .catch(() =>
-                setPlaybackError('Playback could not start. Use the video controls to try again.'),
-              );
-          else el.pause();
-        } else
-          el.currentTime = Math.max(
-            0,
-            Math.min(
-              Number.isFinite(el.duration) ? el.duration : Infinity,
-              el.currentTime + (action === 'forward' ? 5 : -5),
-            ),
-          );
-      }}
     >
       <div className="player-heading">
         <div>
@@ -269,7 +245,7 @@ export function VideoPlayer({
           ref={media}
           src={'/api/video/' + encodeURIComponent(video.id)}
           playsInline
-          preload="metadata"
+          preload="auto"
           tabIndex={0}
           aria-label={video.name}
           onLoadedMetadata={() => {
@@ -347,9 +323,9 @@ export function VideoPlayer({
         </p>
       )}
       <p className="player-hint">
-        Space / K to play · ← → to seek 5 seconds · F for fullscreen · T for full width · P for
-        folder videos · G / H for subtitles earlier / later (50 ms) · Local subtitles stay on this
-        device
+        Space / K to play · M to mute / unmute · ← → to seek 5 seconds · J / L to seek 10 seconds ·
+        ↑ ↓ for volume (20%) · F for fullscreen · T for full width · P for folder videos · G / H for
+        subtitles earlier / later (50 ms) · Local subtitles stay on this device
       </p>
     </section>
   );

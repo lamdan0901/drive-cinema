@@ -292,17 +292,137 @@ it('throttles resume writes and keeps saving after replay', () => {
   fireEvent.timeUpdate(el);
   expect(JSON.parse(localStorage.getItem('drive-cinema:movie')!).time).toBe(5);
 });
-it('keyboard seeks only when the player has focus', () => {
-  const { container } = render(
-    <VideoPlayer video={video} subtitleCandidates={[]} onClose={() => {}} />,
-  );
-  const el = container.querySelector('video')!;
-  Object.defineProperty(el, 'duration', { value: 100 });
+it('keyboard seeks across the page and on focused controls exactly once', () => {
+  const { el } = readyPlayer();
   el.currentTime = 10;
+  fireEvent.keyDown(document.body, { key: 'ArrowRight' });
+  expect(el.currentTime).toBe(15);
+  fireEvent.keyDown(screen.getByRole('button', { name: 'Close video' }), { key: 'ArrowLeft' });
+  expect(el.currentTime).toBe(10);
   fireEvent.keyDown(el, { key: 'ArrowRight' });
   expect(el.currentTime).toBe(15);
+  fireEvent.keyDown(screen.getByRole('slider', { name: 'Seek' }), { key: 'ArrowRight' });
+  expect(el.currentTime).toBe(20);
   fireEvent.keyDown(screen.getByLabelText('Subtitle offset in seconds'), { key: 'ArrowLeft' });
-  expect(el.currentTime).toBe(15);
+  expect(el.currentTime).toBe(20);
+});
+it('J/L seek ten seconds, repeat while held, and clamp to the video bounds', () => {
+  const { el } = readyPlayer();
+  el.currentTime = 30;
+  fireEvent.keyDown(window, { key: 'l' });
+  expect(el.currentTime).toBe(40);
+  fireEvent.keyDown(screen.getByRole('button', { name: 'Fullscreen' }), { key: 'J' });
+  expect(el.currentTime).toBe(30);
+  fireEvent.keyDown(window, { key: 'L', repeat: true });
+  expect(el.currentTime).toBe(40);
+  el.currentTime = 117;
+  fireEvent.keyDown(window, { key: 'l' });
+  expect(el.currentTime).toBe(120);
+  el.currentTime = 3;
+  fireEvent.keyDown(window, { key: 'j' });
+  expect(el.currentTime).toBe(0);
+  expect(screen.getByRole('slider', { name: 'Seek' })).toHaveAttribute('aria-valuenow', '0');
+});
+it.each(['page', 'button', 'seek', 'volume'])(
+  'Up/Down adjust volume by 20 percent from $0',
+  (focus) => {
+    const { el } = readyPlayer();
+    const target =
+      focus === 'page'
+        ? document.body
+        : focus === 'button'
+          ? screen.getByRole('button', { name: 'Fullscreen' })
+          : screen.getByRole('slider', { name: focus === 'seek' ? 'Seek' : 'Volume' });
+    el.currentTime = 30;
+    el.volume = 0.5;
+    fireEvent.volumeChange(el);
+    fireEvent.keyDown(target, { key: 'ArrowUp' });
+    expect(el.volume).toBeCloseTo(0.7);
+    expect(screen.getByRole('slider', { name: 'Volume' })).toHaveValue('0.7');
+    fireEvent.keyDown(target, { key: 'ArrowDown' });
+    expect(el.volume).toBeCloseTo(0.5);
+    expect(el.currentTime).toBe(30);
+  },
+);
+it('volume shortcuts clamp at zero and one and restore audible volume from mute', () => {
+  const { el } = readyPlayer();
+  fireEvent.keyDown(window, { key: 'ArrowUp' });
+  expect(el.volume).toBe(1);
+  el.volume = 0.1;
+  fireEvent.keyDown(window, { key: 'ArrowDown' });
+  expect(el.volume).toBe(0);
+  el.muted = true;
+  fireEvent.keyDown(window, { key: 'ArrowUp', repeat: true });
+  expect(el.volume).toBe(0.2);
+  expect(el.muted).toBe(false);
+});
+it('M toggles mute across the page and preserves volume without repeating while held', () => {
+  const { el } = readyPlayer();
+  el.volume = 0.6;
+  fireEvent.volumeChange(el);
+  fireEvent.keyDown(document.body, { key: 'm' });
+  expect(el.muted).toBe(true);
+  expect(el.volume).toBe(0.6);
+  expect(screen.getByRole('button', { name: 'Unmute' })).toBeInTheDocument();
+  fireEvent.keyDown(window, { key: 'm', repeat: true });
+  expect(el.muted).toBe(true);
+  fireEvent.keyDown(screen.getByRole('button', { name: 'Fullscreen' }), { key: 'M' });
+  expect(el.muted).toBe(false);
+  expect(el.volume).toBe(0.6);
+  expect(screen.getByRole('button', { name: 'Mute' })).toBeInTheDocument();
+  expect(screen.getByRole('slider', { name: 'Volume' })).toHaveValue('0.6');
+});
+it('M restores audible volume from zero like the unmute button', () => {
+  const { el } = readyPlayer();
+  el.volume = 0;
+  fireEvent.volumeChange(el);
+  fireEvent.keyDown(screen.getByRole('slider', { name: 'Volume' }), { key: 'm' });
+  expect(el.volume).toBe(1);
+  expect(el.muted).toBe(false);
+  expect(screen.getByRole('slider', { name: 'Volume' })).toHaveValue('1');
+});
+it('Space/K toggle playback across the page without also activating a focused button', () => {
+  const { el } = readyPlayer();
+  const play = vi.spyOn(el, 'play').mockResolvedValue();
+  const pause = vi.spyOn(el, 'pause').mockImplementation(() => {});
+  const button = screen.getByRole('button', { name: 'Expand to full width' });
+  expect(fireEvent.keyDown(button, { key: ' ' })).toBe(false);
+  expect(play).toHaveBeenCalledOnce();
+  Object.defineProperty(el, 'paused', { configurable: true, value: false });
+  fireEvent.keyDown(document.body, { key: 'K' });
+  expect(pause).toHaveBeenCalledOnce();
+  fireEvent.keyDown(window, { key: 'k', repeat: true });
+  expect(pause).toHaveBeenCalledOnce();
+});
+it('ignores playback shortcuts while editing, composing, modified, or already handled', () => {
+  const { el } = readyPlayer();
+  const play = vi.spyOn(el, 'play').mockResolvedValue();
+  el.currentTime = 30;
+  el.volume = 0.5;
+  for (const key of [' ', 'k', 'j', 'l', 'm', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown']) {
+    fireEvent.keyDown(screen.getByLabelText('Subtitle offset in seconds'), { key });
+    fireEvent.keyDown(screen.getByLabelText('Subtitle track'), { key });
+    for (const modifier of ['ctrlKey', 'altKey', 'metaKey', 'isComposing'])
+      fireEvent.keyDown(el, { key, [modifier]: true });
+    const event = new KeyboardEvent('keydown', { key, cancelable: true });
+    event.preventDefault();
+    fireEvent(window, event);
+  }
+  expect(el.currentTime).toBe(30);
+  expect(el.volume).toBe(0.5);
+  expect(el.muted).toBe(false);
+  expect(play).not.toHaveBeenCalled();
+});
+it('releases page shortcuts when the player is closed', () => {
+  const { el, unmount } = readyPlayer();
+  const play = vi.spyOn(el, 'play').mockResolvedValue();
+  el.currentTime = 30;
+  unmount();
+  for (const key of [' ', 'l', 'm', 'ArrowDown', 'f', 't', 'h'])
+    expect(fireEvent.keyDown(window, { key })).toBe(true);
+  expect(el.currentTime).toBe(30);
+  expect(el.volume).toBe(1);
+  expect(play).not.toHaveBeenCalled();
 });
 it('rejects oversized local subtitles before reading', async () => {
   render(<VideoPlayer video={video} subtitleCandidates={[]} onClose={() => {}} />);
