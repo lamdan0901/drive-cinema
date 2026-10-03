@@ -1,4 +1,5 @@
 import { cookies } from 'next/headers';
+import Image from 'next/image';
 import { configurationStatus, getConfig } from '@/lib/config';
 import { readSession } from '@/lib/auth/session';
 import { Library } from '@/components/library';
@@ -25,7 +26,17 @@ export default async function Page({
   if (session) return <Library key={session.subject} accountId={session.subject} name={session.name} />;
   return (
     <main className="landing">
-      <span className="brand">◉ Drive Cinema</span>
+      <span className="brand">
+        <Image
+          className="brand-icon"
+          src="/brand/cloud-play.png"
+          alt=""
+          width={32}
+          height={32}
+          loading="eager"
+        />
+        <span>Drive Cinema</span>
+      </span>
       <p className="eyebrow">A LITTLE SPACE FOR YOUR NEXT WATCH</p>
       <h1>
         Your Drive.

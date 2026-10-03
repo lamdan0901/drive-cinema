@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useEffectEvent, useRef, useState } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import type { DriveFile, FilePage, SubtitleCandidate } from '@/lib/types';
 import { matchSubtitles } from '@/lib/media/match';
 import { readPins, writePins, type PinnedFolder } from '@/lib/media/pins';
@@ -479,7 +480,15 @@ export function Library({ name, accountId }: { name?: string; accountId: string 
             }
           }}
         >
-          ◉ <span>Drive Cinema</span>
+          <Image
+            className="brand-icon"
+            src="/brand/cloud-play.png"
+            alt=""
+            width={32}
+            height={32}
+            loading="eager"
+          />
+          <span>Drive Cinema</span>
         </Link>
         <div className="account">
           <span>{name ?? 'Your library'}</span>
