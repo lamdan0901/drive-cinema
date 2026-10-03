@@ -18,6 +18,7 @@ export function SubtitleControls({
   setSelected,
   offset,
   setOffset,
+  adjustOffset,
   encoding,
   setEncoding,
   localName,
@@ -29,6 +30,7 @@ export function SubtitleControls({
   setSelected: (id: string) => void;
   offset: number;
   setOffset: (n: number) => void;
+  adjustOffset: (delta: number) => void;
   encoding: 'utf-8' | 'windows-1258';
   setEncoding: (s: 'utf-8' | 'windows-1258') => void;
   localName?: string;
@@ -56,12 +58,12 @@ export function SubtitleControls({
         </select>
       </div>
       <div className="control-group offset-control">
-        <label htmlFor="subtitle-offset">Timing offset</label>
+        <label htmlFor="subtitle-offset">Subtitle delay</label>
         <div>
           <input
             id="subtitle-offset"
             type="number"
-            step="0.1"
+            step="0.05"
             min="-86400"
             max="86400"
             aria-label="Subtitle offset in seconds"
@@ -72,6 +74,32 @@ export function SubtitleControls({
             }}
           />
           <span>seconds</span>
+        </div>
+        <div className="subtitle-delay-buttons">
+          <button
+            type="button"
+            aria-label="Subtitles earlier"
+            title="Show subtitles 50 ms earlier (G)"
+            onClick={() => adjustOffset(-0.05)}
+          >
+            Earlier
+          </button>
+          <button
+            type="button"
+            aria-label="Subtitles later"
+            title="Show subtitles 50 ms later (H)"
+            onClick={() => adjustOffset(0.05)}
+          >
+            Later
+          </button>
+          <button
+            type="button"
+            aria-label="Reset subtitle delay"
+            title="Restore original subtitle timing"
+            onClick={() => setOffset(0)}
+          >
+            Reset
+          </button>
         </div>
         <small>
           {offset < 0

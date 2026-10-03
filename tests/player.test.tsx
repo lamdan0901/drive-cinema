@@ -2,6 +2,8 @@
 import { beforeEach, afterEach, expect, it, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor, cleanup, act } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
+import { Blob as NodeBlob } from 'node:buffer';
+import { webcrypto } from 'node:crypto';
 import { VideoPlayer } from '@/components/video-player';
 const video = { id: 'movie', name: 'Movie.mp4', mimeType: 'video/mp4' };
 const candidates = [
@@ -12,6 +14,7 @@ const candidates = [
   },
 ];
 beforeEach(() => {
+  vi.stubGlobal('crypto', webcrypto);
   vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
   Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
     configurable: true,
@@ -79,6 +82,172 @@ it('offset rebuilds cues from original timestamps', async () => {
   });
   await waitFor(() => expect(URL.createObjectURL).toHaveBeenCalledTimes(2));
   expect(screen.getByText(/Earlier by 2/)).toBeInTheDocument();
+});
+it('adjusts subtitle delay by 50 ms with buttons and resets it', () => {
+  const { el } = readyPlayer();
+  el.currentTime = 20;
+  const offset = screen.getByLabelText('Subtitle offset in seconds');
+  fireEvent.click(screen.getByRole('button', { name: 'Subtitles earlier' }));
+  expect(offset).toHaveValue(-0.05);
+  fireEvent.click(screen.getByRole('button', { name: 'Subtitles later' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Subtitles later' }));
+  expect(offset).toHaveValue(0.05);
+  expect(JSON.parse(localStorage.getItem('drive-cinema:movie')!).offset).toBe(0.05);
+  fireEvent.click(screen.getByRole('button', { name: 'Reset subtitle delay' }));
+  expect(offset).toHaveValue(0);
+  expect(JSON.parse(localStorage.getItem('drive-cinema:movie')!).offset).toBe(0);
+  expect(el.currentTime).toBe(20);
+});
+it('G/H rebuild subtitle timestamps immediately without seeking or fetching again', async () => {
+  vi.stubGlobal('Blob', NodeBlob);
+  const { container } = render(
+    <VideoPlayer video={video} subtitleCandidates={candidates} onClose={() => {}} />,
+  );
+  const el = container.querySelector('video')!;
+  el.currentTime = 20;
+  await waitFor(() => expect(container.querySelector('track')).not.toBeNull());
+  fireEvent.keyDown(el, { key: 'h' });
+  const shifted = vi.mocked(URL.createObjectURL).mock.calls.at(-1)![0] as NodeBlob;
+  expect(await shifted.text()).toContain('00:00:01.050 --> 00:00:03.050');
+  fireEvent.keyDown(window, { key: 'G' });
+  const restored = vi.mocked(URL.createObjectURL).mock.calls.at(-1)![0] as NodeBlob;
+  expect(await restored.text()).toContain('00:00:01.000 --> 00:00:03.000');
+  expect(fetch).toHaveBeenCalledOnce();
+  expect(el.currentTime).toBe(20);
+});
+it('reveals subtitle delay feedback inside fullscreen when controls are hidden', () => {
+  vi.useFakeTimers();
+  const { el, container } = readyPlayer();
+  const stage = container.querySelector('.media-player')!;
+  Object.defineProperty(window.document, 'fullscreenElement', { configurable: true, value: stage });
+  fireEvent(window.document, new Event('fullscreenchange'));
+  fireEvent.play(el);
+  act(() => vi.advanceTimersByTime(2500));
+  expect(stage).not.toHaveClass('media-player--controls-visible');
+  fireEvent.keyDown(window, { key: 'h' });
+  expect(stage).toHaveClass('media-player--controls-visible');
+  const feedback = screen.getByRole('status', { name: 'Subtitle delay' });
+  expect(stage).toContainElement(feedback);
+  expect(feedback).toHaveTextContent('+50 ms');
+  fireEvent.keyDown(screen.getByRole('button', { name: 'Exit fullscreen' }), { key: 'G' });
+  fireEvent.keyDown(window, { key: 'g' });
+  expect(feedback).toHaveTextContent('-50 ms');
+});
+it('ignores subtitle shortcuts while editing, composing, using modifiers, or already handled', () => {
+  readyPlayer();
+  const offset = screen.getByLabelText('Subtitle offset in seconds');
+  for (const key of ['g', 'h']) {
+    fireEvent.keyDown(offset, { key });
+    fireEvent.keyDown(screen.getByLabelText('Subtitle track'), { key });
+    for (const modifier of ['ctrlKey', 'altKey', 'metaKey', 'isComposing'])
+      fireEvent.keyDown(window, { key, [modifier]: true });
+    const event = new KeyboardEvent('keydown', { key, cancelable: true });
+    event.preventDefault();
+    fireEvent(window, event);
+  }
+  expect(offset).toHaveValue(0);
+  fireEvent.keyDown(window, { key: 'h' });
+  expect(offset).toHaveValue(0.05);
+});
+it('allows held subtitle keys without floating point drift and restores the saved delay', async () => {
+  localStorage.setItem(
+    'drive-cinema:movie',
+    JSON.stringify({ time: 0, offset: 0.1, subtitleId: 'vi' }),
+  );
+  const { unmount } = readyPlayer();
+  for (let i = 0; i < 20; i++) fireEvent.keyDown(window, { key: 'h', repeat: i > 0 });
+  expect(screen.getByLabelText('Subtitle offset in seconds')).toHaveValue(1.1);
+  unmount();
+  render(<VideoPlayer video={video} subtitleCandidates={candidates} onClose={() => {}} />);
+  expect(screen.getByLabelText('Subtitle offset in seconds')).toHaveValue(1.1);
+  await waitFor(() => expect(screen.getByLabelText('Subtitle track')).toHaveValue('vi'));
+});
+it.each([
+  { initial: 86399.98, key: 'h', expected: 86400 },
+  { initial: -86399.98, key: 'g', expected: -86400 },
+])('clamps subtitle adjustments at the supported limit ($key)', ({ initial, key, expected }) => {
+  readyPlayer();
+  const offset = screen.getByLabelText('Subtitle offset in seconds');
+  fireEvent.change(offset, { target: { value: String(initial) } });
+  fireEvent.keyDown(window, { key });
+  fireEvent.keyDown(window, { key, repeat: true });
+  expect(offset).toHaveValue(expected);
+  expect(JSON.parse(localStorage.getItem('drive-cinema:movie')!).offset).toBe(expected);
+});
+it('saves a different delay for each video-subtitle pair before video metadata arrives', async () => {
+  const tracks = [
+    ...candidates,
+    {
+      file: { id: 'en', name: 'Movie.en.srt', mimeType: 'text/plain' },
+      language: 'en',
+      matched: false,
+    },
+  ];
+  const view = render(<VideoPlayer video={video} subtitleCandidates={tracks} onClose={() => {}} />);
+  const select = screen.getByLabelText('Subtitle track');
+  const offset = screen.getByLabelText('Subtitle offset in seconds');
+  await waitFor(() => expect(select).toHaveValue('vi'));
+  fireEvent.change(offset, { target: { value: '-1.25' } });
+  fireEvent.change(select, { target: { value: 'en' } });
+  expect(offset).toHaveValue(0);
+  fireEvent.change(offset, { target: { value: '2.5' } });
+  fireEvent.change(select, { target: { value: 'off' } });
+  fireEvent.change(select, { target: { value: 'vi' } });
+  expect(offset).toHaveValue(-1.25);
+  fireEvent.change(select, { target: { value: 'en' } });
+  expect(offset).toHaveValue(2.5);
+  view.unmount();
+  const other = render(
+    <VideoPlayer
+      video={{ ...video, id: 'other-movie' }}
+      subtitleCandidates={tracks}
+      onClose={() => {}}
+    />,
+  );
+  await waitFor(() => expect(screen.getByLabelText('Subtitle track')).toHaveValue('vi'));
+  expect(screen.getByLabelText('Subtitle offset in seconds')).toHaveValue(0);
+  fireEvent.change(screen.getByLabelText('Subtitle offset in seconds'), { target: { value: '3' } });
+  other.unmount();
+  render(<VideoPlayer video={video} subtitleCandidates={tracks} onClose={() => {}} />);
+  await waitFor(() => expect(screen.getByLabelText('Subtitle track')).toHaveValue('vi'));
+  expect(screen.getByLabelText('Subtitle offset in seconds')).toHaveValue(-1.25);
+  fireEvent.change(screen.getByLabelText('Subtitle track'), { target: { value: 'en' } });
+  expect(screen.getByLabelText('Subtitle offset in seconds')).toHaveValue(2.5);
+});
+it('restores local subtitle delays by content, including files with the same name', async () => {
+  vi.stubGlobal('Blob', NodeBlob);
+  const attach = async (text: string) => {
+    const file = new File([text], 'local.srt', { type: 'text/plain' });
+    Object.defineProperty(file, 'arrayBuffer', {
+      value: async () => new TextEncoder().encode(text).buffer,
+    });
+    const previousLoads = vi.mocked(URL.createObjectURL).mock.calls.length;
+    fireEvent.change(screen.getByLabelText('Attach subtitle file'), { target: { files: [file] } });
+    await waitFor(async () => {
+      expect(vi.mocked(URL.createObjectURL).mock.calls.length).toBeGreaterThan(previousLoads);
+      const loaded = vi.mocked(URL.createObjectURL).mock.calls.at(-1)![0] as NodeBlob;
+      expect(await loaded.text()).toContain(text.split('\n').at(-1)!);
+    });
+  };
+  const first = '1\n00:00:01,000 --> 00:00:03,000\nFirst';
+  const second = '1\n00:00:01,000 --> 00:00:03,000\nOther';
+  const view = render(<VideoPlayer video={video} subtitleCandidates={[]} onClose={() => {}} />);
+  await attach(first);
+  fireEvent.change(screen.getByLabelText('Subtitle offset in seconds'), {
+    target: { value: '-0.5' },
+  });
+  await attach(second);
+  expect(screen.getByLabelText('Subtitle offset in seconds')).toHaveValue(0);
+  fireEvent.change(screen.getByLabelText('Subtitle offset in seconds'), {
+    target: { value: '1.5' },
+  });
+  view.unmount();
+  render(<VideoPlayer video={video} subtitleCandidates={[]} onClose={() => {}} />);
+  await attach(first);
+  expect(screen.getByLabelText('Subtitle offset in seconds')).toHaveValue(-0.5);
+  await attach(second);
+  expect(screen.getByLabelText('Subtitle offset in seconds')).toHaveValue(1.5);
+  expect(fetch).not.toHaveBeenCalled();
 });
 it('keeps local subtitle upload in the browser', async () => {
   render(<VideoPlayer video={video} subtitleCandidates={[]} onClose={() => {}} />);

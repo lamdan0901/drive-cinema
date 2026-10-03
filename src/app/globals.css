@@ -633,8 +633,8 @@ h1 {
   text-overflow: ellipsis;
 }
 .offset-control {
-  flex: 0 1 170px;
-  min-width: 160px;
+  flex: 0 1 210px;
+  min-width: 200px;
 }
 .offset-control > div {
   display: flex;
@@ -647,6 +647,22 @@ h1 {
 .offset-control span {
   font-size: 11px;
   color: var(--muted);
+}
+.subtitle-delay-buttons button {
+  padding: 6px 9px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #101510;
+  color: var(--text);
+  font-size: 11px;
+  cursor: pointer;
+}
+.subtitle-delay-buttons button:hover {
+  border-color: var(--accent);
+}
+.subtitle-delay-buttons button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 .control-group small,
 .attach small {

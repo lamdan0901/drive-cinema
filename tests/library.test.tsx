@@ -469,6 +469,6 @@ it('restarts delayed subtitle discovery after an unrelated mutation and ignores 
   fireEvent.click(screen.getByRole('button', { name: 'Delete Movies' }));
   expect(await screen.findByRole('option', { name: /Other.srt/ })).toBeInTheDocument();
   resolve(Response.json({ files: [{ ...subtitle, name: 'Stale.srt' }] }));
-  await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
+  await waitFor(() => expect(screen.queryByRole('status', { name: '' })).not.toBeInTheDocument());
   expect(screen.queryByRole('option', { name: /Stale.srt/ })).not.toBeInTheDocument();
 });

@@ -40,3 +40,36 @@ export function writePreferences(fileId: string, p: Preferences): void {
     /* Playback continues when storage is blocked. */
   }
 }
+
+function subtitleDelayKey(videoId: string, subtitleId: string): string {
+  return `drive-cinema:subtitle-delay:${encodeURIComponent(videoId)}:${encodeURIComponent(subtitleId)}`;
+}
+
+export function readSubtitleDelay(videoId: string, subtitleId: string): number {
+  if (subtitleId === 'off' || subtitleId === 'local') return 0;
+  try {
+    const raw = localStorage.getItem(subtitleDelayKey(videoId, subtitleId));
+    if (raw !== null) {
+      const delay: unknown = JSON.parse(raw);
+      return typeof delay === 'number' && Number.isFinite(delay) && Math.abs(delay) <= 86400
+        ? delay
+        : 0;
+    }
+    // Preserve an older video's delay only for the subtitle it was saved with.
+    const legacy = readPreferences(videoId);
+    return legacy.subtitleId === subtitleId ? legacy.offset : 0;
+  } catch {
+    // Unavailable or corrupt browser storage starts this pair at original timing.
+    return 0;
+  }
+}
+
+export function writeSubtitleDelay(videoId: string, subtitleId: string, delay: number): void {
+  if (subtitleId === 'off' || subtitleId === 'local') return;
+  if (!Number.isFinite(delay) || Math.abs(delay) > 86400) return;
+  try {
+    localStorage.setItem(subtitleDelayKey(videoId, subtitleId), JSON.stringify(delay));
+  } catch {
+    /* Timing controls continue to work when storage is blocked. */
+  }
+}

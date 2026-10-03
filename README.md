@@ -71,14 +71,14 @@ See Google's [web-server OAuth guide](https://developers.google.com/identity/pro
 
 - The subtitle menu shows matching files first and other SRT/VTT files from the parent folder. One unique match is selected automatically. Multiple matches remain selectable.
 - **Attach subtitle** opens a local SRT/VTT, up to **2 MiB**. It stays in browser memory; it is never uploaded to Drive or the application server. Reattach a local file after reloading.
-- Positive timing offsets show subtitles later; negative offsets show them earlier. The original cues are retained, so repeated adjustments do not accumulate drift.
+- Positive timing offsets show subtitles later; negative offsets show them earlier. Use **Earlier**, **Later**, or **G/H** to adjust by **50 ms**, enter an exact delay in seconds, or **Reset** to restore original timing. Holding G/H continues adjusting; typing and modified keys are ignored. The playback bar shows the current delay, including in fullscreen. The original cues are retained, so repeated adjustments do not accumulate drift.
 - Drive subtitles use UTF-8. For a local legacy Vietnamese subtitle, select **Windows-1258** if UTF-8 decoding fails. Other legacy encodings should be converted to UTF-8 first.
 - Custom overlay controls from Immersive-Video-Playlist include playback, volume, a buffered seek bar, and hover timestamps. Controls hide during playback and reappear on interaction; they stay visible while using the keyboard.
 - Three view modes: normal layout, **Expand to full width** (the rectangle button), and **Fullscreen** (the corner button). Expanding centers the video in the viewport; returning to **Normal view** scrolls to the top. Exiting fullscreen returns to your previous layout without restarting playback or subtitles.
 - Press **P** or use the small light-gray button at the top right to show or hide a floating sidebar with all videos in the current folder, including later pages. The button sits just above the video outside fullscreen, and over the video in fullscreen. Select a video to play it. Complete folder lists are cached in memory for one hour during the current page session; successful rename or Trash operations invalidate affected folder lists.
 - While a video is open, **F** toggles fullscreen and **T** switches between full-width and normal view. T leaves fullscreen before switching the page view. P, F, and T ignore text fields, modified keys, held-key repeats, and composition.
 - With the player focused, Space/K toggles playback and arrow keys seek five seconds; text fields retain their normal behavior. The seek bar also supports arrow keys and Home/End.
-- Resume position, selected Drive subtitle, and timing offset are stored on this browser/device. No playback history is stored in Drive. Changing browser or clearing site data removes these preferences.
+- Resume position and the selected Drive subtitle are stored on this browser/device. Subtitle delay is saved in local storage separately for every video–subtitle pair and restored when switching tracks or reopening a video. Local files are identified by a SHA-256 content fingerprint, so reattaching the same file restores its delay and different files with the same name retain separate delays. No playback history is stored in Drive. Changing browser or clearing site data removes these preferences.
 
 ## Video compatibility
 

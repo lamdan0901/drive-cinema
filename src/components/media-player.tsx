@@ -35,6 +35,8 @@ function progressRatio(bar: HTMLDivElement, clientX: number) {
 
 export function MediaPlayer({
   videoRef,
+  subtitleOffset,
+  onAdjustSubtitleOffset,
   expanded,
   onToggleExpanded,
   sidebarOpen = false,
@@ -42,6 +44,8 @@ export function MediaPlayer({
   children,
 }: {
   videoRef: RefObject<HTMLVideoElement | null>;
+  subtitleOffset: number;
+  onAdjustSubtitleOffset: (delta: number) => void;
   expanded: boolean;
   onToggleExpanded: () => void;
   sidebarOpen?: boolean;
@@ -148,13 +152,12 @@ export function MediaPlayer({
     return () => document.removeEventListener('fullscreenchange', onFullscreenChange);
   }, [revealControls]);
 
-  const handleViewShortcut = useEffectEvent(async (event: KeyboardEvent) => {
+  const handlePlayerShortcut = useEffectEvent(async (event: KeyboardEvent) => {
     if (
       event.defaultPrevented ||
       event.ctrlKey ||
       event.altKey ||
       event.metaKey ||
-      event.repeat ||
       event.isComposing ||
       (event.target instanceof Element &&
         event.target.closest(
@@ -163,6 +166,13 @@ export function MediaPlayer({
     )
       return;
     const key = event.key.toLowerCase();
+    if (key === 'g' || key === 'h') {
+      event.preventDefault();
+      onAdjustSubtitleOffset(key === 'g' ? -0.05 : 0.05);
+      revealControls();
+      return;
+    }
+    if (event.repeat) return;
     if (key !== 'f' && key !== 't') return;
     event.preventDefault();
     if (key === 'f') await toggleFullscreen();
@@ -175,7 +185,7 @@ export function MediaPlayer({
   });
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      void handleViewShortcut(event);
+      void handlePlayerShortcut(event);
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
@@ -407,6 +417,16 @@ export function MediaPlayer({
             </span>
           </div>
           <div className="media-player-bar-right">
+            <span
+              className="media-player-subtitle-delay"
+              role="status"
+              aria-label="Subtitle delay"
+              aria-atomic="true"
+              title="G: subtitles earlier · H: subtitles later (50 ms)"
+            >
+              Subtitles {subtitleOffset > 0 ? '+' : ''}
+              {Math.round(subtitleOffset * 1000)} ms
+            </span>
             {!isFullscreen && (
               <button
                 type="button"

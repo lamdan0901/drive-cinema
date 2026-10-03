@@ -1,12 +1,17 @@
 'use client';
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import type { DriveFile, SubtitleCandidate, SubtitleDocument } from '@/lib/types';
 import { parseSubtitles } from '@/lib/subtitles/parse';
 import { serializeVtt } from '@/lib/subtitles/serialize';
 import { shiftCues } from '@/lib/subtitles/shift';
 import { decodeSubtitle, SUBTITLE_LIMIT } from '@/lib/subtitles/decode';
-import { readPreferences, writePreferences } from '@/lib/media/preferences';
+import {
+  readPreferences,
+  writePreferences,
+  readSubtitleDelay,
+  writeSubtitleDelay,
+} from '@/lib/media/preferences';
 import { playerShortcut } from '@/lib/media/shortcuts';
 import { SubtitleControls } from './subtitle-controls';
 import { MediaPlayer } from './media-player';
@@ -29,10 +34,13 @@ export function VideoPlayer({
   onToggleSidebar?: () => void;
 }) {
   const [preferences] = useState(() => readPreferences(video.id));
-  const [selected, setSelected] = useState(preferences.subtitleId ?? 'off');
-  const [offset, setOffset] = useState(preferences.offset);
+  const [subtitle, setSubtitle] = useState(() => {
+    const selected = preferences.subtitleId === 'local' ? 'off' : (preferences.subtitleId ?? 'off');
+    return { selected, key: selected, offset: readSubtitleDelay(video.id, selected) };
+  });
+  const { selected, offset, key: subtitleKey } = subtitle;
   const [encoding, setEncoding] = useState<'utf-8' | 'windows-1258'>('utf-8');
-  const [local, setLocal] = useState<{ name: string; bytes: Uint8Array }>();
+  const [local, setLocal] = useState<{ name: string; bytes: Uint8Array; key: string }>();
   const [document, setDocument] = useState<SubtitleDocument | null>(null);
   const [url, setUrl] = useState('');
   const [error, setError] = useState('');
@@ -56,6 +64,29 @@ export function VideoPlayer({
   const lastWrite = useRef(0);
   const fileSequence = useRef(0);
   const metadataReady = useRef(false);
+  const setSelected = useCallback(
+    (id: string) => {
+      let key = id;
+      if (id === 'local') {
+        if (!local) throw new Error('Attach a local subtitle before selecting it.');
+        key = local.key;
+      }
+      setSubtitle({ selected: id, key, offset: readSubtitleDelay(video.id, key) });
+    },
+    [local, video.id],
+  );
+  function setOffset(offset: number) {
+    setSubtitle((current) => ({ ...current, offset }));
+  }
+  function adjustOffset(delta: number) {
+    setSubtitle((current) => ({
+      ...current,
+      offset: Math.max(-86400, Math.min(86400, Math.round((current.offset + delta) * 1000) / 1000)),
+    }));
+  }
+  useEffect(() => {
+    writeSubtitleDelay(video.id, subtitleKey, offset);
+  }, [video.id, subtitleKey, offset]);
   const latest = useRef({ selected, offset });
   useEffect(() => {
     latest.current = { selected, offset };
@@ -68,13 +99,13 @@ export function VideoPlayer({
     )
       setSelected('off');
     previousCandidates.current = subtitleCandidates;
-  }, [selected, subtitleCandidates]);
+  }, [selected, subtitleCandidates, setSelected]);
   useEffect(() => {
     if (autoChosen.current || !subtitleCandidates.length) return;
     autoChosen.current = true;
     const matches = subtitleCandidates.filter((c) => c.matched);
     if (matches.length === 1) setSelected(matches[0].file.id);
-  }, [subtitleCandidates]);
+  }, [subtitleCandidates, setSelected]);
   useEffect(() => {
     const controller = new AbortController();
     setDocument(null);
@@ -113,7 +144,7 @@ export function VideoPlayer({
       }
     })();
     return () => controller.abort();
-  }, [selected, local, encoding]);
+  }, [selected, local, encoding, setSelected]);
   useEffect(() => {
     if (!document) {
       setUrl('');
@@ -174,11 +205,15 @@ export function VideoPlayer({
     try {
       if (!/\.(srt|vtt)$/i.test(file.name)) throw new Error('Choose an SRT or VTT subtitle file.');
       if (file.size > SUBTITLE_LIMIT) throw new Error('Subtitle files must be 2 MiB or smaller.');
-      const bytes = new Uint8Array(await file.arrayBuffer());
+      const buffer = await file.arrayBuffer();
+      const bytes = new Uint8Array(buffer);
+      const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', buffer));
+      const key =
+        'local:' + Array.from(digest, (byte) => byte.toString(16).padStart(2, '0')).join('');
       if (seq !== fileSequence.current) return;
-      setLocal({ name: file.name, bytes });
+      setLocal({ name: file.name, bytes, key });
       autoChosen.current = true;
-      setSelected('local');
+      setSubtitle({ selected: 'local', key, offset: readSubtitleDelay(video.id, key) });
     } catch (e) {
       if (seq === fileSequence.current)
         setError(e instanceof Error ? e.message : 'Could not open subtitle.');
@@ -223,6 +258,8 @@ export function VideoPlayer({
       </div>
       <MediaPlayer
         videoRef={media}
+        subtitleOffset={offset}
+        onAdjustSubtitleOffset={adjustOffset}
         expanded={expanded}
         onToggleExpanded={() => setExpanded((value) => !value)}
         sidebarOpen={sidebarOpen}
@@ -297,6 +334,7 @@ export function VideoPlayer({
         }}
         offset={offset}
         setOffset={setOffset}
+        adjustOffset={adjustOffset}
         encoding={encoding}
         setEncoding={setEncoding}
         localName={local?.name}
@@ -310,7 +348,8 @@ export function VideoPlayer({
       )}
       <p className="player-hint">
         Space / K to play · ← → to seek 5 seconds · F for fullscreen · T for full width · P for
-        folder videos · Local subtitles stay on this device
+        folder videos · G / H for subtitles earlier / later (50 ms) · Local subtitles stay on this
+        device
       </p>
     </section>
   );
