@@ -139,7 +139,7 @@ it('returns to My Drive when the app brand is clicked', async () => {
   window.history.replaceState(null, '', '/?folder=collection&file=movie');
   render(<Library accountId="viewer" />);
   await screen.findByRole('region', { name: 'Video player' });
-  fireEvent.click(screen.getByRole('link', { name: '◉ Drive Cinema' }));
+  fireEvent.click(screen.getByRole('link', { name: 'Drive Cinema' }));
   await screen.findByRole('button', { name: 'Open folder Movies' });
   expect(window.location.search).toBe('');
   expect(screen.queryByRole('region', { name: 'Video player' })).not.toBeInTheDocument();

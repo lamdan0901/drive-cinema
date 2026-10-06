@@ -37,7 +37,7 @@ Open <http://localhost:3000>. Use **Continue with Google**, open a folder, and s
 
 1. In [Google Cloud Console](https://console.cloud.google.com/), create or select a project.
 2. Enable the **Google Drive API** under APIs & Services.
-3. Configure Google Auth Platform / OAuth consent: set your app name, audience, developer contact, and required scopes. This application requests `openid`, `profile`, and `https://www.googleapis.com/auth/drive` to browse, stream, rename, and move existing files/folders to Trash. If you previously signed in with read-only access, sign in again to grant the new permission.
+3. Configure Google Auth Platform / OAuth consent: set your app name, audience, developer contact, and required scopes. This application requests `openid`, `profile`, and `https://www.googleapis.com/auth/drive` to browse, stream, upload, rename, and move existing files/folders to Trash. If you previously signed in with read-only access, sign in again to grant the new permission.
 4. If your external app is in **Testing**, add your own Google account under test users. Sign in using that account.
 5. Create an OAuth client of type **Web application**. Register this exact authorized redirect URI:
 
@@ -56,6 +56,7 @@ See Google's [web-server OAuth guide](https://developers.google.com/identity/pro
 ## How to use it
 
 - Browse **My Drive** using folders and breadcrumbs. Search is limited to the current folder. **Load more** retrieves the next page.
+- The floating **Upload** button at the bottom right opens the native file picker. Select one or more files to start uploading and show the progress popup. You can also drag files anywhere over the app: a drop overlay shows the destination, and releasing the files starts their uploads. Files upload into the folder selected when they were added, even if you navigate elsewhere. Progress, **Cancel**, and **Retry** are available per file; retry checks Drive's saved progress before continuing. Hide the popup without stopping uploads, then use **Show uploads** beside the Upload button to reopen it. Completed uploads refresh the folder and video sidebar. Uploads and retry state last for the current page session; keep the tab open until they finish.
 - Folder navigation, the selected video, and submitted searches are saved in the URL. Reload or bookmark the page to return to the same location; browser Back/Forward also follows your navigation. Closing the player keeps the current folder.
 - Use **Rename** or **Delete** beside a folder or file. Delete asks for confirmation and moves the item (including folder contents) to Google Drive Trash; restore it in Drive if needed. Actions are disabled when your account lacks the required file permissions.
 - Use **Pin** beside a folder to add it to **Pinned folders**, above the normal folder view. Pins remain available as you navigate and survive reloads on this browser, separately for each Google account. **Unpin** removes only the shortcut.

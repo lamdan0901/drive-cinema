@@ -14,7 +14,12 @@ export interface DriveFile {
   parents?: string[];
   modifiedTime?: string;
   trashed?: boolean;
-  capabilities?: { canDownload?: boolean; canRename?: boolean; canTrash?: boolean };
+  capabilities?: {
+    canDownload?: boolean;
+    canRename?: boolean;
+    canTrash?: boolean;
+    canAddChildren?: boolean;
+  };
 }
 export interface FilePage {
   files: DriveFile[];

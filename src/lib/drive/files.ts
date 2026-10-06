@@ -4,7 +4,7 @@ import { authorizedFetch } from '@/lib/auth/tokens';
 import { checkDrive } from './client';
 import type { Session, DriveFile, FilePage } from '@/lib/types';
 const fields =
-  'id,name,mimeType,size,parents,modifiedTime,trashed,capabilities(canDownload,canRename,canTrash)';
+  'id,name,mimeType,size,parents,modifiedTime,trashed,capabilities(canDownload,canRename,canTrash,canAddChildren)';
 export function parseFileId(input: string): string {
   let id = input.trim();
   if (id.startsWith('http')) {

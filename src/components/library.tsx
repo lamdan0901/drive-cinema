@@ -8,6 +8,7 @@ import { readPins, writePins, type PinnedFolder } from '@/lib/media/pins';
 import { FileBrowser } from './file-browser';
 import { VideoPlayer } from './video-player';
 import { FolderVideoSidebar } from './folder-video-sidebar';
+import { UploadControl } from './upload-control';
 import { createFolderVideoCache } from '@/lib/media/folder-video-cache';
 const folderType = 'application/vnd.google-apps.folder';
 const viewStorageKey = 'drive-cinema:view';
@@ -671,7 +672,7 @@ export function Library({ name, accountId }: { name?: string; accountId: string 
               <p>
                 {query
                   ? 'Try a different search in this folder.'
-                  : 'Open a folder with videos, or paste a Drive link below.'}
+                  : 'Upload files, open a folder with videos, or paste a Drive link below.'}
               </p>
             </div>
           )}
@@ -711,6 +712,19 @@ export function Library({ name, accountId }: { name?: string; accountId: string 
         </footer>
       </main>
       {!video && sidebar}
+      <UploadControl
+        parent={parent}
+        folderName={path.at(-1)!.name}
+        disabled={!locationReady || busy}
+        onComplete={(_file, destination) => {
+          folderVideoCache.invalidate(destination);
+          if (
+            currentPath.current.at(-1)!.id === destination ||
+            video?.parents?.includes(destination)
+          )
+            setRetry((value) => value + 1);
+        }}
+      />
     </div>
   );
 }
